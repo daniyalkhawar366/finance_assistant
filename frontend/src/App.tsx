@@ -15,7 +15,6 @@ import {
   Filter, 
   X,
   Menu,
-  RefreshCw,
   Bell,
   Settings,
   Cloud,
@@ -91,9 +90,39 @@ export default function App() {
   const [passwordWarning, setPasswordWarning] = useState('');
   const [fullNameWarning, setFullNameWarning] = useState('');
 
+  // Account Form Fields
+  const [profileName, setProfileName] = useState(localStorage.getItem('finance_fullname') || '');
+  const [profilePassword, setProfilePassword] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [profileNameWarning, setProfileNameWarning] = useState('');
+  const [profilePasswordWarning, setProfilePasswordWarning] = useState('');
+
   // App navigation state
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat' | 'transactions' | 'budgets'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat' | 'transactions' | 'budgets' | 'account'>(() => {
+    const hash = window.location.hash.replace('#', '');
+    const validTabs = ['dashboard', 'chat', 'transactions', 'budgets', 'account'];
+    return validTabs.includes(hash) ? (hash as any) : 'dashboard';
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeTab) {
+      window.location.hash = activeTab;
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      const validTabs = ['dashboard', 'chat', 'transactions', 'budgets', 'account'];
+      if (validTabs.includes(hash)) {
+        setActiveTab(hash as any);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Core data states
   const [stats, setStats] = useState<any>(null);
@@ -103,11 +132,13 @@ export default function App() {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [hoveredPoint, setHoveredPoint] = useState<{name: string, value: number, x: number, y: number} | null>(null);
   
   // Modals and form states
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   
   // Add Transaction Form
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0]);
@@ -159,28 +190,7 @@ export default function App() {
     }, 4000);
   };
 
-  // Re-seed demo dataset endpoint handler
-  const [seedingDemo, setSeedingDemo] = useState(false);
-  const handleLoadDemo = async () => {
-    if (!token) return;
-    setSeedingDemo(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/dashboard/seed`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        triggerToast("Demo dataset loaded successfully.", "success");
-        await loadData();
-      } else {
-        triggerToast("Failed to load demo dataset.", "error");
-      }
-    } catch (err) {
-      triggerToast("Network error trying to seed data.", "error");
-    } finally {
-      setSeedingDemo(false);
-    }
-  };
+
 
   // Load user details
   const loadUserDetails = async () => {
@@ -262,6 +272,67 @@ export default function App() {
       loadData();
     }
   }, [token]);
+
+  useEffect(() => {
+    if (userFullName) {
+      setProfileName(userFullName);
+    }
+  }, [userFullName]);
+
+  const handleProfileNameChange = (val: string) => {
+    setProfileName(val);
+    if (!val) {
+      setProfileNameWarning('Name is required.');
+    } else if (/\d/.test(val)) {
+      setProfileNameWarning('Numbers are excluded in names.');
+    } else {
+      setProfileNameWarning('');
+    }
+  };
+
+  const handleProfilePasswordChange = (val: string) => {
+    setProfilePassword(val);
+    if (val && val.length < 6) {
+      setProfilePasswordWarning('Password must be at least 6 characters.');
+    } else {
+      setProfilePasswordWarning('');
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileSuccess('');
+    setProfileError('');
+    if (profileNameWarning || profilePasswordWarning) {
+      setProfileError('Please resolve all validation errors before proceeding.');
+      return;
+    }
+    try {
+      const payload: any = { full_name: profileName };
+      if (profilePassword.trim()) {
+        payload.password = profilePassword;
+      }
+      const res = await fetch(`${API_BASE}/api/auth/update`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to update profile');
+      }
+      setUserFullName(data.full_name);
+      localStorage.setItem('finance_fullname', data.full_name || '');
+      setProfileSuccess('Profile updated successfully!');
+      setProfilePassword('');
+      triggerToast('Profile credentials updated.', 'success');
+    } catch (err: any) {
+      setProfileError(err.message);
+    }
+  };
 
   // Scroll to bottom of chat
   useEffect(() => {
@@ -882,22 +953,23 @@ export default function App() {
             )}
           </div>
 
-          <div className="user-badge" style={{ gap: '0.75rem', padding: '0.75rem 0' }}>
-            <div className="profile-avatar" style={{ width: '28px', height: '28px', border: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="user-badge" style={{ gap: '0.75rem', padding: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <div 
+              className="profile-avatar" 
+              onClick={() => { setActiveTab('account'); setIsSidebarOpen(false); }}
+              style={{ width: '28px', height: '28px', border: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              title="View Account Profile"
+            >
               <span style={{ fontSize: '10px', fontWeight: 600, color: '#ffffff' }}>
                 {userFullName ? userFullName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'GU'}
               </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <span className="user-email" style={{ fontWeight: 600, color: '#ffffff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{userFullName || 'Guest User'}</span>
-              <span className="text-muted" style={{ fontSize: '10px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{userEmail}</span>
-              <span 
-                onClick={handleSignOut} 
-                style={{ color: 'var(--color-error)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem', fontSize: '10px' }}
-              >
-                <LogOut size={10} /> Logout
-              </span>
-            </div>
+            <span 
+              onClick={() => setIsLogoutConfirmOpen(true)} 
+              style={{ color: 'var(--color-error)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '11px', fontWeight: 500 }}
+            >
+              <LogOut size={12} /> Logout
+            </span>
           </div>
         </div>
       </aside>
@@ -937,16 +1009,6 @@ export default function App() {
           </div>
           
           <div className="top-header-right">
-            <button 
-              className="btn" 
-              style={{ fontSize: '11px', padding: '0.35rem 0.65rem', border: '1px solid var(--color-border)', marginRight: '0.5rem' }}
-              onClick={handleLoadDemo}
-              disabled={seedingDemo}
-            >
-              <RefreshCw size={11} className={seedingDemo ? 'spin' : ''} style={{ marginRight: '0.25rem' }} />
-              {seedingDemo ? ' Seeding...' : ' Load Demo Dataset'}
-            </button>
-            
             <div className="icon-button" onClick={() => triggerToast("No new notifications.", "info")}>
               <Bell size={16} />
             </div>
@@ -957,10 +1019,9 @@ export default function App() {
             
             <div className="header-divider"></div>
             
-            <div className="user-profile-badge">
+            <div className="user-profile-badge" onClick={() => setActiveTab('account')} style={{ cursor: 'pointer' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                 <span className="profile-name">{userFullName || 'Guest User'}</span>
-                <span className="profile-tier">{userPortfolioTier || 'Standard Access'}</span>
               </div>
               <div className="profile-avatar">
                 <span style={{ fontSize: '11px', fontWeight: 600 }}>
@@ -972,7 +1033,7 @@ export default function App() {
         </header>
 
         {/* Viewport for tab contents */}
-        <main className="main-content" style={{ flexGrow: 1, overflowY: 'auto', padding: '2rem' }}>
+        <main className={`main-content tab-${activeTab}`} style={{ flexGrow: 1, padding: '2rem' }}>
           
           {/* 1. DASHBOARD TAB */}
           {activeTab === 'dashboard' && (
@@ -1075,18 +1136,22 @@ export default function App() {
 
               {/* Bento Grid */}
               <div className="bento-grid">
-                
-                {/* Net Cashflow (col-8 width) */}
                 <div className="bento-card col-8">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <span className="bento-card-title">Net Cashflow</span>
                       <p className="text-muted" style={{ fontSize: '11px', marginTop: '0.15rem' }}>6-Month Performance Overview</p>
                     </div>
-                    <div style={{ display: 'flex', border: '1px solid var(--color-border)', borderRadius: '4px', overflow: 'hidden' }}>
-                      <button className="btn" style={{ fontSize: '10px', padding: '0.25rem 0.5rem', borderRadius: 0, backgroundColor: 'rgba(93, 92, 255, 0.08)', border: 'none', color: '#8F90FF', fontWeight: 600 }}>Last 6 Months</button>
-                      <button className="btn" style={{ fontSize: '10px', padding: '0.25rem 0.5rem', borderRadius: 0, background: 'transparent', border: 'none', borderLeft: '1px solid var(--color-border)', color: 'var(--color-outline)' }} onClick={() => triggerToast("YTD historical stats are loading.", "info")}>Year to Date</button>
-                    </div>
+                    {hoveredPoint ? (
+                      <div className="tab-view-animate" style={{ fontSize: '11px', border: '1px solid var(--color-primary-indigo)', borderRadius: '4px', backgroundColor: 'rgba(93, 92, 255, 0.1)', padding: '0.25rem 0.5rem', color: '#ffffff' }}>
+                        <strong>{hoveredPoint.name}</strong>: <span style={{ color: 'var(--color-success)' }}>${hoveredPoint.value.toLocaleString()}</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', border: '1px solid var(--color-border)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <button className="btn" style={{ fontSize: '10px', padding: '0.25rem 0.5rem', borderRadius: 0, backgroundColor: 'rgba(93, 92, 255, 0.08)', border: 'none', color: '#8F90FF', fontWeight: 600 }}>Last 6 Months</button>
+                        <button className="btn" style={{ fontSize: '10px', padding: '0.25rem 0.5rem', borderRadius: 0, background: 'transparent', border: 'none', borderLeft: '1px solid var(--color-border)', color: 'var(--color-outline)' }} onClick={() => triggerToast("YTD historical stats are loading.", "info")}>Year to Date</button>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Performance Wave Chart SVG */}
@@ -1100,25 +1165,46 @@ export default function App() {
                       </defs>
                       {/* Grid lines */}
                       <line x1="0" y1="25" x2="500" y2="25" stroke="#1c1c24" strokeWidth="1" strokeDasharray="3" />
-                      <line x1="0" y1="75" x2="500" y2="75" stroke="#1c1c24" strokeWidth="1" strokeDasharray="3" />
-                      <line x1="0" y1="125" x2="500" y2="125" stroke="#1c1c24" strokeWidth="1" strokeDasharray="3" />
+                      <line x1="0" y1="65" x2="500" y2="65" stroke="#1c1c24" strokeWidth="1" strokeDasharray="3" />
+                      <line x1="0" y1="105" x2="500" y2="105" stroke="#1c1c24" strokeWidth="1" strokeDasharray="3" />
                       
                       {/* Area Under the curve */}
-                      <path d="M 0 110 C 80 110, 120 130, 160 120 C 200 110, 240 60, 300 70 C 360 80, 400 120, 440 110 C 480 100, 490 50, 500 45 L 500 150 L 0 150 Z" fill="url(#chartGrad)" />
+                      <path d="M 10 110 C 80 110, 120 130, 160 120 C 200 110, 240 60, 300 70 C 360 80, 400 120, 440 110 C 480 100, 490 50, 490 45 L 490 125 L 10 125 Z" fill="url(#chartGrad)" />
                       
                       {/* Wave Line */}
-                      <path d="M 0 110 C 80 110, 120 130, 160 120 C 200 110, 240 60, 300 70 C 360 80, 400 120, 440 110 C 480 100, 490 50, 500 45" fill="none" stroke="#5D5CFF" strokeWidth="2.5" />
+                      <path d="M 10 110 C 80 110, 120 130, 160 120 C 200 110, 240 60, 300 70 C 360 80, 400 120, 440 110 C 480 100, 490 50, 490 45" fill="none" stroke="#5D5CFF" strokeWidth="2.5" />
+
+                      {/* Interactive circles */}
+                      {[
+                        { name: 'JAN', value: 18500.00, x: 10, y: 110 },
+                        { name: 'FEB', value: 24200.00, x: 106, y: 122 },
+                        { name: 'MAR', value: 19800.00, x: 202, y: 110 },
+                        { name: 'APR', value: 38900.00, x: 298, y: 70 },
+                        { name: 'MAY', value: 21500.00, x: 394, y: 115 },
+                        { name: 'JUN', value: 45780.00, x: 490, y: 45 }
+                      ].map((pt, idx) => (
+                        <circle
+                          key={idx}
+                          cx={pt.x}
+                          cy={pt.y}
+                          r={hoveredPoint?.name === pt.name ? 6 : 3.5}
+                          fill={hoveredPoint?.name === pt.name ? "#ffffff" : "#5D5CFF"}
+                          stroke="#0A0B0D"
+                          strokeWidth={hoveredPoint?.name === pt.name ? 2.5 : 1.5}
+                          style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
+                          onMouseEnter={() => setHoveredPoint(pt)}
+                          onMouseLeave={() => setHoveredPoint(null)}
+                        />
+                      ))}
+
+                      {/* SVG Month Labels directly mapped for perfect alignment */}
+                      <text x="10" y="142" fill="var(--color-outline)" fontSize="10" fontWeight="600" textAnchor="start">JAN</text>
+                      <text x="106" y="142" fill="var(--color-outline)" fontSize="10" fontWeight="600" textAnchor="middle">FEB</text>
+                      <text x="202" y="142" fill="var(--color-outline)" fontSize="10" fontWeight="600" textAnchor="middle">MAR</text>
+                      <text x="298" y="142" fill="var(--color-outline)" fontSize="10" fontWeight="600" textAnchor="middle">APR</text>
+                      <text x="394" y="142" fill="var(--color-outline)" fontSize="10" fontWeight="600" textAnchor="middle">MAY</text>
+                      <text x="490" y="142" fill="var(--color-outline)" fontSize="10" fontWeight="600" textAnchor="end">JUN</text>
                     </svg>
-                    
-                    {/* X-axis Month Labels */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', fontSize: '10px', fontWeight: 600, color: 'var(--color-outline)', padding: '0 0.5rem' }}>
-                      <span>JAN</span>
-                      <span>FEB</span>
-                      <span>MAR</span>
-                      <span>APR</span>
-                      <span>MAY</span>
-                      <span>JUN</span>
-                    </div>
                   </div>
                 </div>
 
@@ -1428,20 +1514,6 @@ export default function App() {
                         <div style={{ whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: '1.6' }}>
                           {msg.text}
                         </div>
-                      )}
-
-                      {/* SQL Logs dropdown for assistant messages */}
-                      {msg.sql_queries && msg.sql_queries.length > 0 && (
-                        <details className="sql-log-section">
-                          <summary className="sql-log-header" style={{ cursor: 'pointer', outline: 'none' }}>
-                            <Terminal size={10} /> View system execution logs ({msg.sql_queries.length} queries)
-                          </summary>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                            {msg.sql_queries.map((q, idx) => (
-                              <pre key={idx} className="sql-query-text">{q}</pre>
-                            ))}
-                          </div>
-                        </details>
                       )}
                     </div>
                   ))}
@@ -1832,6 +1904,84 @@ export default function App() {
           </div>
         )}
 
+        {/* 5. ACCOUNT TAB */}
+        {activeTab === 'account' && (
+          <div className="tab-view-animate">
+            <div>
+              <h1 className="headline-xl">Account Settings</h1>
+              <p className="text-muted" style={{ fontSize: '13px' }}>Update your user profile credentials and secure password.</p>
+            </div>
+
+            <div className="account-container-centered" style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: '2rem' }}>
+              <div className="bento-card" style={{ padding: '2.5rem', width: '100%', maxWidth: '520px', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+                <h3 className="headline-md" style={{ marginBottom: '1.5rem' }}>Personal Profile</h3>
+                
+                {profileSuccess && (
+                  <div style={{ backgroundColor: 'rgba(46, 125, 50, 0.1)', border: '1px solid var(--color-success)', color: 'var(--color-success)', padding: '0.75rem', borderRadius: '4px', fontSize: '13px', marginBottom: '1.25rem' }}>
+                    {profileSuccess}
+                  </div>
+                )}
+                {profileError && (
+                  <div style={{ backgroundColor: 'rgba(198, 40, 40, 0.1)', border: '1px solid var(--color-error)', color: 'var(--color-error)', padding: '0.75rem', borderRadius: '4px', fontSize: '13px', marginBottom: '1.25rem' }}>
+                    {profileError}
+                  </div>
+                )}
+
+                <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                  <div className="auth-input-group" style={{ margin: 0 }}>
+                    <label className="auth-input-label">Account Email Address</label>
+                    <input 
+                      type="text" 
+                      className="auth-input" 
+                      disabled 
+                      value={userEmail || ''} 
+                      style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                    />
+                  </div>
+
+                  <div className="auth-input-group" style={{ margin: 0 }}>
+                    <label className="auth-input-label">Full Name</label>
+                    <input 
+                      type="text" 
+                      className="auth-input" 
+                      required 
+                      value={profileName}
+                      onChange={e => handleProfileNameChange(e.target.value)}
+                      placeholder="e.g. Alex Vance"
+                    />
+                    {profileNameWarning && (
+                      <span style={{ color: '#ffb4ab', fontSize: '11px', marginTop: '0.25rem', display: 'block' }}>{profileNameWarning}</span>
+                    )}
+                  </div>
+
+                  <div className="auth-input-group" style={{ margin: 0 }}>
+                    <label className="auth-input-label">New Password (leave blank to keep current)</label>
+                    <input 
+                      type="password" 
+                      className="auth-input" 
+                      value={profilePassword}
+                      onChange={e => handleProfilePasswordChange(e.target.value)}
+                      placeholder="••••••••"
+                    />
+                    {profilePasswordWarning && (
+                      <span style={{ color: '#ffb4ab', fontSize: '11px', marginTop: '0.25rem', display: 'block' }}>{profilePasswordWarning}</span>
+                    )}
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    className="auth-button"
+                    style={{ marginTop: '0.5rem', width: 'auto', padding: '0.75rem 1.5rem', alignSelf: 'flex-start' }}
+                    disabled={!!profileNameWarning || !!profilePasswordWarning}
+                  >
+                    Save Updates
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
       </div>
 
@@ -2008,6 +2158,43 @@ export default function App() {
                 onClick={executeDeleteBudget}
               >
                 Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLogoutConfirmOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3 className="headline-md" style={{ color: 'var(--color-error)' }}>Confirm Session Logout</h3>
+              <X size={18} style={{ cursor: 'pointer' }} onClick={() => setIsLogoutConfirmOpen(false)} />
+            </div>
+            
+            <div style={{ marginTop: '0.5rem', marginBottom: '1.5rem' }}>
+              <p className="text-muted" style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                Are you sure you want to end your current session and sign out of the Revonix Finance Cockpit?
+              </p>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button 
+                className="btn" 
+                style={{ border: '1px solid var(--color-border)', background: 'transparent' }} 
+                onClick={() => setIsLogoutConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn" 
+                style={{ backgroundColor: 'var(--color-error)', color: '#ffffff', border: 'none' }} 
+                onClick={() => {
+                  setIsLogoutConfirmOpen(false);
+                  handleSignOut();
+                }}
+              >
+                Log Out
               </button>
             </div>
           </div>

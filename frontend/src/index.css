@@ -1612,4 +1612,35 @@ body {
     padding: 1.5rem;
     gap: 1.25rem;
   }
+  
+  .search-bar-container {
+    display: none !important;
+  }
+}
+
+.main-content.tab-chat,
+.main-content.tab-transactions {
+  overflow-y: hidden;
+}
+
+@media (max-width: 768px) {
+  .main-content.tab-chat,
+  .main-content.tab-transactions {
+    overflow-y: auto;
+  }
+}
+
+.account-container-centered {
+  padding: 0 1.5rem;
+  box-sizing: border-box;
+}
+
+@media (max-width: 576px) {
+  .account-container-centered {
+    padding: 0 0.25rem;
+    margin-top: 1rem !important;
+  }
+  .account-container-centered .bento-card {
+    padding: 1.5rem !important;
+  }
 }

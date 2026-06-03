@@ -12,7 +12,7 @@ from backend.database import get_db, Base, engine
 from backend.config import settings
 from backend.models import User, Transaction, Budget, Subscription, UserContext
 from backend.auth import get_current_user, verify_password, get_password_hash, create_access_token
-from backend.schemas import UserCreate, UserLogin, UserResponse, Token, TransactionResponse, TransactionCreate, BudgetCreate, BudgetResponse, ChatRequest, ChatResponse
+from backend.schemas import UserCreate, UserLogin, UserUpdate, UserResponse, Token, TransactionResponse, TransactionCreate, BudgetCreate, BudgetResponse, ChatRequest, ChatResponse
 from backend.analyzer import detect_and_save_subscriptions, detect_anomalies, check_budgets
 from backend.agent import FinanceAgent
 
@@ -120,6 +120,20 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
 
 @app.get("/api/auth/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+@app.put("/api/auth/update", response_model=UserResponse)
+def update_profile(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if user_update.full_name is not None:
+        current_user.full_name = user_update.full_name
+    if user_update.password is not None:
+        current_user.password_hash = get_password_hash(user_update.password)
+    db.commit()
+    db.refresh(current_user)
     return current_user
 
 # Transactions Endpoints

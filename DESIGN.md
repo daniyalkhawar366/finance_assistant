@@ -1,5 +1,5 @@
 ---
-name: Editorial Utility
+name: Revonix
 colors:
   surface: '#121414'
   surface-dim: '#121414'
