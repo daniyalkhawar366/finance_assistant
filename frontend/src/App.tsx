@@ -6,7 +6,6 @@ import {
   UploadCloud, 
   AlertTriangle, 
   LogOut, 
-  User as UserIcon, 
   Send, 
   Paperclip, 
   Plus, 
@@ -15,13 +14,12 @@ import {
   Search, 
   Filter, 
   X,
+  Menu,
   RefreshCw,
   Bell,
   Settings,
   Cloud,
   Plane,
-  Briefcase,
-  Activity,
   ChevronRight
 } from 'lucide-react';
 
@@ -86,12 +84,16 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [portfolioTier, setPortfolioTier] = useState('Private Client');
+  const [portfolioTier] = useState('Private Client');
   const [authError, setAuthError] = useState('');
   const [isAuthSuccessTransition, setIsAuthSuccessTransition] = useState(false);
+  const [emailWarning, setEmailWarning] = useState('');
+  const [passwordWarning, setPasswordWarning] = useState('');
+  const [fullNameWarning, setFullNameWarning] = useState('');
 
   // App navigation state
   const [activeTab, setActiveTab] = useState<'dashboard' | 'chat' | 'transactions' | 'budgets'>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Core data states
   const [stats, setStats] = useState<any>(null);
@@ -266,9 +268,46 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  const handleEmailChange = (val: string) => {
+    setEmail(val);
+    if (!val) {
+      setEmailWarning('');
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+      setEmailWarning('Invalid email format (e.g. name@company.com).');
+    } else {
+      setEmailWarning('');
+    }
+  };
+
+  const handlePasswordChange = (val: string) => {
+    setPassword(val);
+    if (!val) {
+      setPasswordWarning('');
+    } else if (val.length < 6) {
+      setPasswordWarning('Password must be at least 6 characters.');
+    } else {
+      setPasswordWarning('');
+    }
+  };
+
+  const handleFullNameChange = (val: string) => {
+    setFullName(val);
+    if (!val) {
+      setFullNameWarning('');
+    } else if (/\d/.test(val)) {
+      setFullNameWarning('Numbers are excluded in names.');
+    } else {
+      setFullNameWarning('');
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+    if (emailWarning || passwordWarning || (!isLoginView && fullNameWarning)) {
+      setAuthError('Please resolve all validation errors before proceeding.');
+      return;
+    }
     const endpoint = isLoginView ? '/api/auth/login' : '/api/auth/signup';
     const bodyData = isLoginView 
       ? { email, password }
@@ -671,24 +710,29 @@ export default function App() {
                   className="auth-input" 
                   required 
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={e => handleEmailChange(e.target.value)}
                   placeholder="name@company.com"
                 />
+                {emailWarning && (
+                  <span style={{ color: '#ffb4ab', fontSize: '11px', marginTop: '0.25rem', display: 'block' }}>{emailWarning}</span>
+                )}
               </div>
 
               <div className="auth-input-group">
                 <div className="auth-input-label-container">
                   <label className="auth-input-label">Password</label>
-                  {isLoginView && <span className="auth-forgot-link">Forgot?</span>}
                 </div>
                 <input 
                   type="password" 
                   className="auth-input" 
                   required 
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={e => handlePasswordChange(e.target.value)}
                   placeholder="••••••••"
                 />
+                {passwordWarning && (
+                  <span style={{ color: '#ffb4ab', fontSize: '11px', marginTop: '0.25rem', display: 'block' }}>{passwordWarning}</span>
+                )}
               </div>
 
               {!isLoginView && (
@@ -700,24 +744,12 @@ export default function App() {
                       className="auth-input" 
                       required 
                       value={fullName}
-                      onChange={e => setFullName(e.target.value)}
+                      onChange={e => handleFullNameChange(e.target.value)}
                       placeholder="e.g. Alex Mercer"
                     />
-                  </div>
-
-                  <div className="auth-input-group">
-                    <label className="auth-input-label">Portfolio Tier / Role</label>
-                    <select 
-                      className="auth-input" 
-                      style={{ backgroundColor: '#0A0B0D', border: '1px solid var(--color-border)', cursor: 'pointer', height: '40px' }}
-                      value={portfolioTier}
-                      onChange={e => setPortfolioTier(e.target.value)}
-                    >
-                      <option value="Private Client">Private Client</option>
-                      <option value="Private Equity">Private Equity</option>
-                      <option value="Venture Capital">Venture Capital</option>
-                      <option value="Corporate Wealth">Corporate Wealth Management</option>
-                    </select>
+                    {fullNameWarning && (
+                      <span style={{ color: '#ffb4ab', fontSize: '11px', marginTop: '0.25rem', display: 'block' }}>{fullNameWarning}</span>
+                    )}
                   </div>
                 </>
               )}
@@ -725,7 +757,7 @@ export default function App() {
               {isLoginView && (
                 <div className="auth-checkbox-container">
                   <input type="checkbox" id="stay-signed" className="auth-checkbox" defaultChecked />
-                  <label htmlFor="stay-signed" className="auth-checkbox-label">Stay signed in for 30 days</label>
+                  <label htmlFor="stay-signed" className="auth-checkbox-label">Remember me</label>
                 </div>
               )}
 
@@ -735,7 +767,11 @@ export default function App() {
                 </div>
               )}
 
-              <button type="submit" className="auth-button">
+              <button 
+                type="submit" 
+                className="auth-button"
+                disabled={!!emailWarning || !!passwordWarning || (!isLoginView && !!fullNameWarning)}
+              >
                 <span>{isLoginView ? 'Sign In' : 'Create Account'}</span>
                 <span>&rarr;</span>
               </button>
@@ -750,9 +786,12 @@ export default function App() {
                 onClick={() => {
                   setIsLoginView(!isLoginView);
                   setAuthError('');
+                  setEmailWarning('');
+                  setPasswordWarning('');
+                  setFullNameWarning('');
                 }}
               >
-                {isLoginView ? 'Request an invite' : 'Sign in instead'}
+                {isLoginView ? 'Create account' : 'Sign in instead'}
               </span>
             </div>
           </div>
@@ -764,7 +803,7 @@ export default function App() {
   return (
     <div className="app-container">
       {/* Sidebar Navigation */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div>
           <div className="sidebar-header" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '1.25rem' }}>
             <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -783,7 +822,7 @@ export default function App() {
           <nav className="sidebar-menu" style={{ marginTop: '1.5rem' }}>
             <div 
               className={`sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dashboard')}
+              onClick={() => { setActiveTab('dashboard'); setIsSidebarOpen(false); }}
             >
               <LayoutDashboard size={16} />
               <span>Dashboard</span>
@@ -791,7 +830,7 @@ export default function App() {
 
             <div 
               className={`sidebar-item ${activeTab === 'chat' ? 'active' : ''}`}
-              onClick={() => setActiveTab('chat')}
+              onClick={() => { setActiveTab('chat'); setIsSidebarOpen(false); }}
             >
               <Terminal size={16} />
               <span>AI Cockpit</span>
@@ -799,7 +838,7 @@ export default function App() {
 
             <div 
               className={`sidebar-item ${activeTab === 'transactions' ? 'active' : ''}`}
-              onClick={() => setActiveTab('transactions')}
+              onClick={() => { setActiveTab('transactions'); setIsSidebarOpen(false); }}
             >
               <TableProperties size={16} />
               <span>Transactions</span>
@@ -807,7 +846,7 @@ export default function App() {
 
             <div 
               className={`sidebar-item ${activeTab === 'budgets' ? 'active' : ''}`}
-              onClick={() => setActiveTab('budgets')}
+              onClick={() => { setActiveTab('budgets'); setIsSidebarOpen(false); }}
             >
               <DollarSign size={16} />
               <span>Budget Bounds</span>
@@ -863,11 +902,24 @@ export default function App() {
         </div>
       </aside>
 
+      {isSidebarOpen && (
+        <div 
+          className="sidebar-overlay"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Main Column Wrapper */}
       <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, height: '100vh', overflow: 'hidden' }}>
         
         {/* Globally wrapped header bar */}
         <header className="top-header">
+          <button 
+            className="sidebar-mobile-toggle"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          >
+            {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
           <div className="search-bar-container">
             <Search size={14} className="text-muted" />
             <input 
@@ -1608,18 +1660,15 @@ export default function App() {
                         style={{ fontSize: '11px', flex: 1, padding: '0.5rem', border: '1px solid var(--color-border)' }}
                         onClick={() => {
                           triggerToast(`Flagged transaction as unusual. Anomaly report generated.`, "success");
-                          const exists = anomalies.some(a => a.id === selectedTx.id);
+                          const exists = anomalies.some(a => a.transaction_id === selectedTx.id);
                           if (!exists) {
                             setAnomalies([...anomalies, {
-                              id: selectedTx.id,
-                              user_id: selectedTx.user_id,
                               transaction_id: selectedTx.id,
                               amount: selectedTx.amount,
-                              merchant: selectedTx.description,
+                              description: selectedTx.description,
                               category: selectedTx.category,
                               date: selectedTx.date,
-                              reason: "User flagged manually",
-                              created_at: new Date().toISOString()
+                              reason: "User flagged manually"
                             }]);
                           }
                         }}
