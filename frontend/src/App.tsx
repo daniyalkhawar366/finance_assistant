@@ -813,43 +813,10 @@ export default function App() {
               <span>Budget Bounds</span>
             </div>
 
-            <div 
-              className="sidebar-item disabled"
-              style={{ opacity: 0.4, cursor: 'not-allowed' }}
-              onClick={() => triggerToast("Markets module under construction.", "info")}
-            >
-              <Activity size={16} />
-              <span>Markets</span>
-            </div>
-
-            <div 
-              className="sidebar-item disabled"
-              style={{ opacity: 0.4, cursor: 'not-allowed' }}
-              onClick={() => triggerToast("Portfolio allocation tools locked.", "info")}
-            >
-              <Briefcase size={16} />
-              <span>Portfolio</span>
-            </div>
-
-            <div 
-              className="sidebar-item disabled"
-              style={{ opacity: 0.4, cursor: 'not-allowed' }}
-              onClick={() => triggerToast("Advisory insights coming soon.", "info")}
-            >
-              <UserIcon size={16} />
-              <span>Advisory</span>
-            </div>
           </nav>
         </div>
 
         <div className="sidebar-footer">
-          <button 
-            className="upgrade-btn" 
-            style={{ width: '100%', marginBottom: '1rem' }}
-            onClick={() => triggerToast("Upgrade locked during assessment session.", "info")}
-          >
-            Upgrade to Pro
-          </button>
 
           {/* CSV File Upload quick link */}
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1rem', marginBottom: '1rem' }}>
@@ -957,7 +924,7 @@ export default function App() {
           
           {/* 1. DASHBOARD TAB */}
           {activeTab === 'dashboard' && (
-            <>
+            <div className="tab-view-animate">
               {isLoadingData ? (
                 <div className="bento-grid">
                   {/* Net Cashflow skeleton */}
@@ -1306,12 +1273,12 @@ export default function App() {
               </div>
                 </>
               )}
-            </>
+            </div>
           )}
 
         {/* 2. CHAT ASSISTANT TAB */}
         {activeTab === 'chat' && (
-          <>
+          <div className="tab-view-animate">
             <div>
               <h1 className="headline-xl">Technical Cockpit</h1>
               <p className="text-muted" style={{ fontSize: '13px' }}>AI-agent session with real-time SQL execution logs.</p>
@@ -1513,11 +1480,11 @@ export default function App() {
                 </form>
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {activeTab === 'transactions' && (
-          <>
+          <div className="tab-view-animate">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div>
                 <h1 className="headline-xl">Transactions Ledger</h1>
@@ -1741,12 +1708,12 @@ export default function App() {
                 )}
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* 4. BUDGETS TAB */}
         {activeTab === 'budgets' && (
-          <>
+          <div className="tab-view-animate">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h1 className="headline-xl">Category Limits</h1>
@@ -1813,7 +1780,7 @@ export default function App() {
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
 
       </main>

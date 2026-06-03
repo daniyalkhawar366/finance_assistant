@@ -12,5 +12,6 @@ class Settings:
     # API Keys for AI assistant
     OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
     GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
+    GROQ_API_KEY: str | None = os.getenv("GROQ_API_KEY")
 
 settings = Settings()

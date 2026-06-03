@@ -262,8 +262,48 @@ When answering the user:
                     }
             except Exception as e:
                 print(f"OpenAI API execution failed: {e}. Falling back...")
+
+        # 3. Try Groq API (OpenAI Compatible)
+        if settings.GROQ_API_KEY:
+            try:
+                from openai import OpenAI
+                client = OpenAI(
+                    base_url="https://api.groq.com/openai/v1",
+                    api_key=settings.GROQ_API_KEY
+                )
                 
-        # 3. Fallback to intelligent regex compiler (Runs locally, no internet/keys needed!)
+                messages = [
+                    {"role": "system", "content": system_instructions},
+                    {"role": "user", "content": f"Write the SELECT SQL query to answer: {prompt}. Return only the SQL query as plain text, no markdown, no quotes."}
+                ]
+                
+                completion = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=messages,
+                    temperature=0.0
+                )
+                sql = completion.choices[0].message.content.strip()
+                sql = re.sub(r"```sql\s*|\s*```", "", sql).strip()
+                
+                if sql.lower().startswith("select"):
+                    results = self.execute_read_sql(sql)
+                    messages.append({"role": "assistant", "content": sql})
+                    messages.append({"role": "user", "content": f"Results from database: {json.dumps(results)}. Now, generate your final user-facing response. Address the user directly. Highlight key figures in markdown."})
+                    
+                    final_completion = client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=messages,
+                        temperature=0.3
+                    )
+                    response_text = final_completion.choices[0].message.content
+                    return {
+                        "response": response_text,
+                        "sql_queries": [sql]
+                    }
+            except Exception as e:
+                print(f"Groq API execution failed: {e}. Falling back...")
+                
+        # 4. Fallback to intelligent regex compiler (Runs locally, no internet/keys needed!)
         return self.run_regex_compiler(prompt)
 
     def run_regex_compiler(self, prompt: str) -> dict:
