@@ -103,4 +103,28 @@ This application is built defensively against unexpected user behavior and malic
 1. **SQL Injection Mitigation**: The AI-agent system strictly filters and parses incoming SQL statements before running them. It validates queries using a regex pattern, rejecting any containing mutation operations (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, `TRUNCATE`, `REPLACE`). It also enforces that queries are filtered on the active authenticated `user_id`.
 2. **Missing / Malformed CSV Records**: The CSV reader matches column headers dynamically (case-insensitive and partial matches). It skips empty rows, ignores junk lines, and converts parenthesized strings like `($10.00)` to negative floats (`-10.0`).
 3. **Blurry or Rotated Receipts**: Renders clean receipt upload previews. OCR falls back to simulated high-fidelity extraction containing category tags and amounts if OCR scanner credentials are unconfigured, ensuring the app never crashes.
-4. **No API Key Configuration**: Instantly falls back to the local regex compiler, executing DB analysis in milliseconds with 0% cloud dependencies and 0% runtime costs.
+### 4. No API Key Configuration: Instantly falls back to the local regex compiler, executing DB analysis in milliseconds with 0% cloud dependencies and 0% runtime costs.
+
+---
+
+## 📝 Design & Take-Home Evaluation Notes
+
+### 1. Key Architectural Decisions & Trade-offs
+*   **Agentic SQL Tool-Calling**: Rather than feeding the user's entire transaction ledger into the LLM context window (which breaks down as history grows, balloons token costs, and increases latency), we designed a **SQL tool-calling agent**. The model receives the database schema, constructs a precise, read-only SQLite `SELECT` query, and executes it. 
+    *   *Trade-off*: We trade LLM flexibility for extreme scalability, absolute cost efficiency, and sub-second execution times. 
+    *   *Security*: We mitigate SQL Injection risks by verifying that queries are strictly read-only (`SELECT` statements only) and automatically appending the active user's `user_id` to prevent cross-tenant data leaks.
+*   **Hash-Based SPA Navigation Routing**: Synced tab changes directly to the URL hash (e.g., `/#dashboard`, `/#account`).
+    *   *Trade-off*: Provides bookmarking and page refresh support with zero external router package dependencies, preventing routing setup compilation bloat.
+
+### 2. Assumptions & Limitations
+*   **Reference Date Alignment**: Because static CSV datasets contain historical transactions (e.g., June 2024), using standard calendar date functions like `CURRENT_DATE` would result in empty analytics. We assumed the dataset represents the active financial timeline and dynamically calculate stats relative to the *latest transaction date* present in the user's database.
+*   **Local SQLite Storage**: We selected SQLite to ensure the application remains fully self-contained, requiring zero database server installation or setup configurations.
+
+### 3. What Was Intentionally Skipped or Stubbed
+*   **Plaid / Live Bank Feeds**: Skipped live banking OAuth integrations in favor of high-performance **CSV file ingestion** and autoseeding on sign-up to simplify evaluation.
+*   **Third-party OCR API keys**: Receipt scanning utilizes local simulation extraction of transaction elements if OCR API credentials are empty to guarantee zero startup friction.
+
+### 4. Challenges Faced & Resolved
+*   **Mobile Split View Collapsibility**: The Transactions Ledger and AI Cockpit use high-fidelity split-pane layouts that require fixed container heights on desktop. On mobile, these layouts would normally get cut off. We resolved this by building clean CSS breakpoints that convert split-panes to standard block flows and hide horizontal overflow.
+*   **Git Tracking Caches**: Pycache files were previously tracked in version history, bloating the repo. We cleared the Git index cache and updated `.gitignore` rules to keep the codebase perfectly clean for evaluation.
+
