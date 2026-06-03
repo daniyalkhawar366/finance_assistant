@@ -78,8 +78,21 @@ export default function App() {
   const [userFullName, setUserFullName] = useState<string | null>(localStorage.getItem('finance_fullname'));
   const [userPortfolioTier, setUserPortfolioTier] = useState<string | null>(localStorage.getItem('finance_portfolio_tier'));
   
+  // Routing / Landing Page state
+  const [showLandingPage, setShowLandingPage] = useState<boolean>(() => {
+    const path = window.location.pathname.replace('/', '');
+    const validTabs = ['dashboard', 'chat', 'transactions', 'budgets', 'account'];
+    const hasToken = !!localStorage.getItem('finance_token');
+    if (validTabs.includes(path) && hasToken) return false;
+    if ((path === 'login' || path === 'signup') && !hasToken) return false;
+    return true;
+  });
+
   // Auth Form Fields
-  const [isLoginView, setIsLoginView] = useState(true);
+  const [isLoginView, setIsLoginView] = useState(() => {
+    const path = window.location.pathname.replace('/', '');
+    return path !== 'signup';
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -107,23 +120,45 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (activeTab) {
+    if (activeTab && !showLandingPage && token) {
       const currentPath = window.location.pathname.replace('/', '');
       if (currentPath !== activeTab) {
         window.history.pushState(null, '', `/${activeTab}`);
       }
     }
-  }, [activeTab]);
+  }, [activeTab, showLandingPage, token]);
 
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.replace('/', '');
-      const validTabs = ['dashboard', 'chat', 'transactions', 'budgets', 'account'];
-      if (validTabs.includes(path)) {
-        setActiveTab(path as any);
+      const hasToken = !!localStorage.getItem('finance_token');
+      
+      if (path === '' || path === 'landing') {
+        setShowLandingPage(true);
+      } else if (path === 'login' || path === 'signup') {
+        if (hasToken) {
+          setShowLandingPage(false);
+          setActiveTab('dashboard');
+          window.history.replaceState(null, '', '/dashboard');
+        } else {
+          setShowLandingPage(false);
+          setIsLoginView(path === 'login');
+        }
+      } else {
+        const validTabs = ['dashboard', 'chat', 'transactions', 'budgets', 'account'];
+        if (validTabs.includes(path)) {
+          if (!hasToken) {
+            setShowLandingPage(true);
+            window.history.replaceState(null, '', '/');
+          } else {
+            setShowLandingPage(false);
+            setActiveTab(path as any);
+          }
+        }
       }
     };
     window.addEventListener('popstate', handlePopState);
+    handlePopState();
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
@@ -411,6 +446,9 @@ export default function App() {
         setTimeout(() => {
           loadUserDetails();
           loadData();
+          setShowLandingPage(false);
+          setActiveTab('dashboard');
+          window.history.pushState(null, '', '/dashboard');
           triggerToast(
             isLoginView 
               ? 'Welcome back to Revonix!' 
@@ -436,6 +474,8 @@ export default function App() {
     setUserFullName(null);
     setUserPortfolioTier(null);
     setActiveTab('dashboard');
+    setShowLandingPage(true);
+    window.history.pushState(null, '', '/');
     setChatMessages([
       {
         id: 'welcome',
@@ -773,6 +813,253 @@ export default function App() {
     );
   }
 
+  const navigateToTab = (tabName: 'dashboard' | 'chat' | 'transactions' | 'budgets' | 'account') => {
+    const hasToken = !!localStorage.getItem('finance_token');
+    if (hasToken) {
+      setShowLandingPage(false);
+      setActiveTab(tabName);
+      window.history.pushState(null, '', `/${tabName}`);
+    } else {
+      setIsLoginView(true);
+      setShowLandingPage(false);
+      window.history.pushState(null, '', '/login');
+    }
+  };
+
+  const navigateToAuth = (loginMode: boolean) => {
+    const hasToken = !!localStorage.getItem('finance_token');
+    if (hasToken) {
+      setShowLandingPage(false);
+      setActiveTab('dashboard');
+      window.history.pushState(null, '', '/dashboard');
+    } else {
+      setIsLoginView(loginMode);
+      setShowLandingPage(false);
+      window.history.pushState(null, '', loginMode ? '/login' : '/signup');
+    }
+  };
+
+  if (showLandingPage) {
+    return (
+      <div className="landing-page">
+        {/* Navigation Bar */}
+        <header className="landing-nav">
+          <div className="landing-nav-logo" onClick={() => { setShowLandingPage(true); window.history.pushState(null, '', '/'); }} style={{ cursor: 'pointer' }}>
+            <svg width="24" height="24" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M32 6L54 18L32 30L10 18L32 6Z" stroke="#5D5CFF" strokeWidth="5" strokeLinejoin="round" fill="rgba(93, 92, 255, 0.1)"/>
+              <path d="M10 18L32 30V54L10 42V18Z" stroke="#5D5CFF" strokeWidth="5" strokeLinejoin="round" fill="rgba(93, 92, 255, 0.05)"/>
+              <path d="M32 30L54 18V42L32 54V30Z" stroke="#5D5CFF" strokeWidth="5" strokeLinejoin="round" fill="rgba(93, 92, 255, 0.15)"/>
+            </svg>
+            <span className="landing-nav-logo-text">Revonix Finance</span>
+          </div>
+
+          <nav className="landing-nav-links">
+            <span className="landing-nav-link" onClick={() => navigateToTab('dashboard')}>Dashboard</span>
+            <span className="landing-nav-link" onClick={() => navigateToTab('chat')}>AI Cockpit</span>
+            <span className="landing-nav-link" onClick={() => navigateToTab('transactions')}>Transactions</span>
+            <span className="landing-nav-link" onClick={() => navigateToTab('budgets')}>Budget Bounds</span>
+          </nav>
+
+          <div className="landing-nav-auth">
+            {token ? (
+              <div className="landing-user-badge" onClick={() => navigateToTab('dashboard')}>
+                <span className="landing-user-name">{userFullName || userEmail || 'Dashboard'}</span>
+                <span className="landing-user-arrow">&rarr;</span>
+              </div>
+            ) : (
+              <button className="landing-btn-signin" onClick={() => navigateToAuth(true)}>Sign In</button>
+            )}
+          </div>
+        </header>
+
+        {/* Hero Section */}
+        <section className="landing-hero">
+          <div className="landing-hero-left">
+            <h1 className="landing-hero-title">
+              Financial Architecture for the Discerning.
+            </h1>
+            <p className="landing-hero-desc">
+              Precision wealth management powered by institutional-grade intelligence and an editorial-minimalist interface.
+            </p>
+            <div className="landing-hero-actions">
+              <button className="landing-btn-primary" onClick={() => token ? navigateToTab('dashboard') : navigateToAuth(false)}>
+                {token ? 'Go to Dashboard' : 'Get Started'} <span style={{ marginLeft: '0.25rem' }}>&rarr;</span>
+              </button>
+              <button className="landing-btn-secondary" onClick={() => token ? navigateToTab('account') : navigateToAuth(true)}>
+                {token ? 'Account Settings' : 'View Dashboard'}
+              </button>
+            </div>
+          </div>
+
+          <div className="landing-hero-right">
+            {/* Dashboard Mockup Screenshot */}
+            <div className="landing-mockup-wrapper">
+              <img src="/dashboard_hero.png" alt="Revonix Dashboard mockup" className="landing-mockup-image" />
+
+              {/* Floating AI Insight Subcard */}
+              <div className="landing-floating-insight" onClick={() => navigateToTab('chat')}>
+                <div className="landing-floating-header">
+                  <div className="landing-floating-icon">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                  </div>
+                  <span>AI Insights</span>
+                </div>
+                <p className="landing-floating-text">
+                  "Rebalancing detected: 2.4% hidden yield in emerging sectors."
+                </p>
+                <div className="landing-floating-link">
+                  View Analysis &rarr;
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Capabilities Title */}
+        <div className="landing-section-tag">CAPABILITIES</div>
+        <h2 className="landing-section-title">Engineered for Technical Mastery</h2>
+
+        {/* Capabilities Grid */}
+        <section className="landing-grid">
+          {/* Card 1 */}
+          <div className="landing-grid-card" onClick={() => navigateToTab('chat')}>
+            <div className="landing-grid-image-box">
+              <img src="/command_cockpit.png" alt="Intelligence First" className="landing-grid-image" />
+            </div>
+            <div className="landing-grid-card-content">
+              <div className="landing-grid-icon-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+              </div>
+              <h3 className="landing-grid-title">Intelligence First</h3>
+              <p className="landing-grid-text">
+                Complex portfolio analysis powered by the Revonix AI Assistant. Model multi-layered scenarios with precision.
+              </p>
+              <div className="landing-grid-link">
+                LAUNCH ASSISTANT &rarr;
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2 */}
+          <div className="landing-grid-card" onClick={() => navigateToTab('dashboard')}>
+            <div className="landing-grid-image-box">
+              <img src="/dashboard_hero.png" alt="Data Density" className="landing-grid-image" />
+            </div>
+            <div className="landing-grid-card-content">
+              <div className="landing-grid-icon-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="9" />
+                  <rect x="14" y="3" width="7" height="5" />
+                  <rect x="14" y="12" width="7" height="9" />
+                  <rect x="3" y="16" width="7" height="5" />
+                </svg>
+              </div>
+              <h3 className="landing-grid-title">Data Density</h3>
+              <p className="landing-grid-text">
+                A bento-box dashboard optimized for information throughput without cognitive overhead.
+              </p>
+              <div className="landing-grid-link">
+                EXPERIENCE TERMINAL &rarr;
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3 */}
+          <div className="landing-grid-card" onClick={() => navigateToTab('transactions')}>
+            <div className="landing-grid-image-box">
+              <img src="/privacy_vault.png" alt="Total Visibility" className="landing-grid-image" />
+            </div>
+            <div className="landing-grid-card-content">
+              <div className="landing-grid-icon-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </div>
+              <h3 className="landing-grid-title">Total Visibility</h3>
+              <p className="landing-grid-text">
+                Drill down into every micro-transaction. Integrated receipt management and audit-ready tracking.
+              </p>
+              <div className="landing-grid-link">
+                TRACE ACTIVITY &rarr;
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Quote Block */}
+        <section className="landing-quote-section">
+          <p className="landing-quote">
+            "Institutional security. Personal precision."
+          </p>
+          <div className="landing-logos-row">
+            <span className="landing-logo-brand">AETHER_CAPITAL</span>
+            <span className="landing-logo-brand">STRATUM_GRP</span>
+            <span className="landing-logo-brand">SECURE_LEDGER</span>
+            <span className="landing-logo-brand">PRISM_INV</span>
+          </div>
+        </section>
+
+        {/* Invite CTA Section */}
+        <section className="landing-invite-section">
+          <h2 className="landing-invite-title">
+            The next generation of financial intelligence.
+          </h2>
+          <button className="landing-invite-button" onClick={() => token ? navigateToTab('dashboard') : navigateToAuth(false)}>
+            {token ? 'Go to Dashboard' : 'Request an Invite'}
+          </button>
+          <p className="landing-invite-sub">
+            Reserved for institutional partners and private clients.
+          </p>
+        </section>
+
+        {/* Footer */}
+        <footer className="landing-footer">
+          <div className="landing-footer-top">
+            <div className="landing-footer-logo">
+              <svg width="20" height="20" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M32 6L54 18L32 30L10 18L32 6Z" stroke="#5D5CFF" strokeWidth="5" strokeLinejoin="round" fill="rgba(93, 92, 255, 0.1)"/>
+                <path d="M10 18L32 30V54L10 42V18Z" stroke="#5D5CFF" strokeWidth="5" strokeLinejoin="round" fill="rgba(93, 92, 255, 0.05)"/>
+                <path d="M32 30L54 18V42L32 54V30Z" stroke="#5D5CFF" strokeWidth="5" strokeLinejoin="round" fill="rgba(93, 92, 255, 0.15)"/>
+              </svg>
+              <span>Revonix Finance</span>
+            </div>
+            <div className="landing-footer-links">
+              <span>Privacy Policy</span>
+              <span>Terms of Service</span>
+              <span>Cookie Settings</span>
+              <span>Disclosures</span>
+            </div>
+          </div>
+          <div className="landing-footer-bottom">
+            <p className="landing-footer-copy">
+              &copy; 2026 Revonix Finance. All rights reserved. Member SIPC/FINRA.
+            </p>
+            <div className="landing-footer-icons">
+              <span className="landing-footer-icon-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+                  <rect x="2" y="9" width="4" height="12" />
+                  <circle cx="4" cy="4" r="2" />
+                </svg>
+              </span>
+              <span className="landing-footer-icon-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
   // If not logged in, show Auth splash
   if (!token) {
     return (
@@ -907,7 +1194,14 @@ export default function App() {
       <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div>
           <div className="sidebar-header" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '1.25rem' }}>
-            <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div 
+              className="sidebar-logo" 
+              onClick={() => {
+                setShowLandingPage(true);
+                window.history.pushState(null, '', '/');
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}
+            >
               <svg width="24" height="24" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M32 6L54 18L32 30L10 18L32 6Z" stroke="#5D5CFF" strokeWidth="5" strokeLinejoin="round" fill="rgba(93, 92, 255, 0.1)"/>
                 <path d="M10 18L32 30V54L10 42V18Z" stroke="#5D5CFF" strokeWidth="5" strokeLinejoin="round" fill="rgba(93, 92, 255, 0.05)"/>
@@ -957,33 +1251,20 @@ export default function App() {
         </div>
 
         <div className="sidebar-footer">
+          <input 
+            type="file" 
+            accept=".csv" 
+            style={{ display: 'none' }} 
+            ref={fileInputRef}
+            onChange={handleCSVUpload}
+          />
+          {csvUploadResult && (
+            <p style={{ fontSize: '10px', textAlign: 'center', marginBottom: '0.5rem', color: 'var(--color-success)' }}>
+              {csvUploadResult}
+            </p>
+          )}
 
-          {/* CSV File Upload quick link */}
-          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1rem', marginBottom: '1rem' }}>
-            <input 
-              type="file" 
-              accept=".csv" 
-              style={{ display: 'none' }} 
-              ref={fileInputRef}
-              onChange={handleCSVUpload}
-            />
-            <button 
-              className="btn" 
-              style={{ width: '100%', fontSize: '11px', padding: '0.35rem' }}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingCSV}
-            >
-              <UploadCloud size={12} />
-              {uploadingCSV ? 'Importing...' : 'IMPORT TRANSACTION CSV'}
-            </button>
-            {csvUploadResult && (
-              <p style={{ fontSize: '10px', textAlign: 'center', marginTop: '0.5rem', color: 'var(--color-success)' }}>
-                {csvUploadResult}
-              </p>
-            )}
-          </div>
-
-          <div className="user-badge" style={{ padding: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+          <div className="user-badge" style={{ padding: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', borderTop: '1px solid var(--color-border)' }}>
             <span 
               onClick={() => setIsLogoutConfirmOpen(true)} 
               style={{ color: 'var(--color-error)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '12px', fontWeight: 500 }}
@@ -2173,15 +2454,13 @@ export default function App() {
             
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
               <button 
-                className="btn" 
-                style={{ border: '1px solid var(--color-border)', background: 'transparent' }} 
+                className="btn btn-cancel" 
                 onClick={() => setConfirmDeleteId(null)}
               >
                 Cancel
               </button>
               <button 
-                className="btn" 
-                style={{ backgroundColor: 'var(--color-error)', color: '#ffffff', border: 'none' }} 
+                className="btn btn-danger" 
                 onClick={executeDeleteBudget}
               >
                 Confirm Delete
@@ -2207,15 +2486,13 @@ export default function App() {
             
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
               <button 
-                className="btn" 
-                style={{ border: '1px solid var(--color-border)', background: 'transparent' }} 
+                className="btn btn-cancel" 
                 onClick={() => setIsLogoutConfirmOpen(false)}
               >
                 Cancel
               </button>
               <button 
-                className="btn" 
-                style={{ backgroundColor: 'var(--color-error)', color: '#ffffff', border: 'none' }} 
+                className="btn btn-danger" 
                 onClick={() => {
                   setIsLogoutConfirmOpen(false);
                   handleSignOut();
