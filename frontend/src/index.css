@@ -1644,3 +1644,9 @@ body {
     padding: 1.5rem !important;
   }
 }
+
+/* Fix select option text color and background in dark mode */
+select option {
+  background-color: #1e2020 !important;
+  color: #ffffff !important;
+}

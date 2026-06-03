@@ -100,28 +100,31 @@ export default function App() {
 
   // App navigation state
   const [activeTab, setActiveTab] = useState<'dashboard' | 'chat' | 'transactions' | 'budgets' | 'account'>(() => {
-    const hash = window.location.hash.replace('#', '');
+    const path = window.location.pathname.replace('/', '');
     const validTabs = ['dashboard', 'chat', 'transactions', 'budgets', 'account'];
-    return validTabs.includes(hash) ? (hash as any) : 'dashboard';
+    return validTabs.includes(path) ? (path as any) : 'dashboard';
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (activeTab) {
-      window.location.hash = activeTab;
+      const currentPath = window.location.pathname.replace('/', '');
+      if (currentPath !== activeTab) {
+        window.history.pushState(null, '', `/${activeTab}`);
+      }
     }
   }, [activeTab]);
 
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '');
+    const handlePopState = () => {
+      const path = window.location.pathname.replace('/', '');
       const validTabs = ['dashboard', 'chat', 'transactions', 'budgets', 'account'];
-      if (validTabs.includes(hash)) {
-        setActiveTab(hash as any);
+      if (validTabs.includes(path)) {
+        setActiveTab(path as any);
       }
     };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Core data states
@@ -446,14 +449,41 @@ export default function App() {
   // Add transaction
   const handleAddTx = async (e: React.FormEvent) => {
     e.preventDefault();
-    setTxError('');
-    if (!txDesc || !txAmount) {
+    const cleanDesc = txDesc.trim();
+    if (!cleanDesc || !txAmount) {
       setTxError('Please enter a description and amount.');
+      return;
+    }
+
+    if (cleanDesc.length < 3) {
+      setTxError('Description must be at least 3 characters long.');
+      return;
+    }
+
+    if (cleanDesc.length > 80) {
+      setTxError('Description must not exceed 80 characters.');
+      return;
+    }
+
+    let amt = parseFloat(txAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setTxError('Amount must be a valid number greater than 0.');
+      return;
+    }
+
+    if (!txDate) {
+      setTxError('Please select a valid transaction date.');
+      return;
+    }
+    const selectedDate = new Date(txDate);
+    const maxFutureDate = new Date();
+    maxFutureDate.setFullYear(maxFutureDate.getFullYear() + 1);
+    if (selectedDate > maxFutureDate) {
+      setTxError('Transaction date cannot be more than 1 year in the future.');
       return;
     }
     
     // Expenses are negative in this model
-    let amt = parseFloat(txAmount);
     if (amt > 0 && txCategory !== 'Income') {
       amt = -amt;
     }
@@ -953,22 +983,12 @@ export default function App() {
             )}
           </div>
 
-          <div className="user-badge" style={{ gap: '0.75rem', padding: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <div 
-              className="profile-avatar" 
-              onClick={() => { setActiveTab('account'); setIsSidebarOpen(false); }}
-              style={{ width: '28px', height: '28px', border: '1px solid var(--color-border)', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-              title="View Account Profile"
-            >
-              <span style={{ fontSize: '10px', fontWeight: 600, color: '#ffffff' }}>
-                {userFullName ? userFullName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'GU'}
-              </span>
-            </div>
+          <div className="user-badge" style={{ padding: '0.75rem 0', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
             <span 
               onClick={() => setIsLogoutConfirmOpen(true)} 
-              style={{ color: 'var(--color-error)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '11px', fontWeight: 500 }}
+              style={{ color: 'var(--color-error)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '12px', fontWeight: 500 }}
             >
-              <LogOut size={12} /> Logout
+              <LogOut size={14} /> Logout
             </span>
           </div>
         </div>
@@ -1000,7 +1020,8 @@ export default function App() {
               className="top-search-input"
               value={txSearch}
               onChange={(e) => {
-                setTxSearch(e.target.value);
+                const cleanValue = e.target.value.substring(0, 50).replace(/[^a-zA-Z0-9\s.\-_]/g, '');
+                setTxSearch(cleanValue);
                 if (activeTab !== 'transactions') {
                   setActiveTab('transactions');
                 }
@@ -1616,6 +1637,9 @@ export default function App() {
               </div>
               
               <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button className="btn" onClick={() => fileInputRef.current?.click()} disabled={uploadingCSV}>
+                  <UploadCloud size={14} /> {uploadingCSV ? 'Importing...' : 'Import CSV'}
+                </button>
                 <button className="btn" onClick={() => setIsTxModalOpen(true)}>
                   <Plus size={14} /> Add Transaction
                 </button>
@@ -1636,7 +1660,10 @@ export default function App() {
                       style={{ border: 'none', background: 'transparent', padding: '0.15rem', fontSize: '12px' }}
                       placeholder="Search description..." 
                       value={txSearch}
-                      onChange={e => setTxSearch(e.target.value)}
+                      onChange={e => {
+                        const cleanValue = e.target.value.substring(0, 50).replace(/[^a-zA-Z0-9\s.\-_]/g, '');
+                        setTxSearch(cleanValue);
+                      }}
                     />
                   </div>
 
@@ -1906,10 +1933,10 @@ export default function App() {
 
         {/* 5. ACCOUNT TAB */}
         {activeTab === 'account' && (
-          <div className="tab-view-animate">
-            <div>
+          <div className="tab-view-animate" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+            <div style={{ textAlign: 'center' }}>
               <h1 className="headline-xl">Account Settings</h1>
-              <p className="text-muted" style={{ fontSize: '13px' }}>Update your user profile credentials and secure password.</p>
+              <p className="text-muted" style={{ fontSize: '13px', marginTop: '0.25rem' }}>Update your user profile credentials and secure password.</p>
             </div>
 
             <div className="account-container-centered" style={{ display: 'flex', justifyContent: 'center', width: '100%', marginTop: '2rem' }}>

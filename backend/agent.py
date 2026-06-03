@@ -17,6 +17,33 @@ class FinanceAgent:
     def log_sql(self, sql: str):
         self.sql_log.append(sql)
 
+    def clean_and_parse_llm_json(self, text: str, fallback_sql: str = None) -> dict:
+        """
+        Cleans LLM response text, strips markdown wrappers/prefixes, and parses JSON.
+        """
+        cleaned = text.strip()
+        # Remove any prefixes like AGENT_RESULT or similar
+        cleaned = re.sub(r"^agent_result\s*", "", cleaned, flags=re.IGNORECASE).strip()
+        # Strip code block markdown if present
+        cleaned = re.sub(r"```json\s*|\s*```", "", cleaned).strip()
+        cleaned = re.sub(r"```\s*|\s*```", "", cleaned).strip()
+        
+        try:
+            data = json.loads(cleaned)
+            if "response" in data:
+                # If sql_queries isn't present, insert fallback
+                if "sql_queries" not in data or not data["sql_queries"]:
+                    data["sql_queries"] = [fallback_sql] if fallback_sql else []
+                return data
+        except Exception:
+            pass
+            
+        # Fallback if parsing failed or text is just plain text
+        return {
+            "response": text,
+            "sql_queries": [fallback_sql] if fallback_sql else []
+        }
+
     def execute_read_sql(self, sql_query: str) -> list[dict]:
         """
         Executes a SELECT SQL query on the database.
@@ -217,10 +244,7 @@ When answering the user:
                     # Second turn: Generate final answer
                     final_prompt = f"{system_instructions}\n\nUser Question: {prompt}\n\nSQL Ran: {sql}\n\nResults: {json.dumps(results)}\n\nGenerate your final response in the required JSON format: {{\"response\": \"Markdown text\", \"sql_queries\": [\"{sql}\"]}}"
                     final_resp = model.generate_content(final_prompt)
-                    final_text = final_resp.text
-                    
-                    cleaned_final = re.sub(r"```json\s*|\s*```", "", final_text).strip()
-                    return json.loads(cleaned_final)
+                    return self.clean_and_parse_llm_json(final_text, sql)
             except Exception as e:
                 print(f"Gemini API execution failed: {e}. Falling back...")
 
@@ -255,11 +279,7 @@ When answering the user:
                         messages=messages,
                         temperature=0.3
                     )
-                    response_text = final_completion.choices[0].message.content
-                    return {
-                        "response": response_text,
-                        "sql_queries": [sql]
-                    }
+                    return self.clean_and_parse_llm_json(response_text, sql)
             except Exception as e:
                 print(f"OpenAI API execution failed: {e}. Falling back...")
 
@@ -295,11 +315,7 @@ When answering the user:
                         messages=messages,
                         temperature=0.3
                     )
-                    response_text = final_completion.choices[0].message.content
-                    return {
-                        "response": response_text,
-                        "sql_queries": [sql]
-                    }
+                    return self.clean_and_parse_llm_json(response_text, sql)
             except Exception as e:
                 print(f"Groq API execution failed: {e}. Falling back...")
                 
