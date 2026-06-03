@@ -1,0 +1,30 @@
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments
+backend/venv/
+venv/
+ENV/
+env/
+.env
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads and temporary media
+uploads/
+node_modules/
+dist/
+.DS_Store
+
+# IDE Configs
+.vscode/
+.idea/
