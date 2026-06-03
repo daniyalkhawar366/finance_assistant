@@ -6,12 +6,16 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6)
+    full_name: str | None = None
+    portfolio_tier: str | None = None
 
 class UserLogin(UserBase):
     password: str
 
 class UserResponse(UserBase):
     id: str
+    full_name: str | None = None
+    portfolio_tier: str | None = None
     created_at: datetime
 
     class Config:

@@ -191,8 +191,12 @@ def check_budgets(db: Session, user_id: str) -> list[dict]:
     if not budgets:
         return []
         
-    # Get current year-month
-    current_month_str = datetime.utcnow().strftime("%Y-%m")
+    # Get the latest transaction month or fall back to current year-month
+    latest_tx = db.query(Transaction).filter(Transaction.user_id == user_id).order_by(Transaction.date.desc()).first()
+    if latest_tx and latest_tx.date:
+        current_month_str = latest_tx.date[:7]
+    else:
+        current_month_str = datetime.utcnow().strftime("%Y-%m")
     
     # Sum expenses for this month grouped by category
     transactions = db.query(Transaction).filter(

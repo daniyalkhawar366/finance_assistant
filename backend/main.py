@@ -33,19 +33,81 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def seed_data(db: Session, user_id: int):
+    # 1. Budgets
+    budgets = [
+        Budget(user_id=user_id, category="Monthly Operating", limit_amount=5000.0, period="monthly"),
+        Budget(user_id=user_id, category="Discretionary", limit_amount=1000.0, period="monthly"),
+        Budget(user_id=user_id, category="Client Entertainment", limit_amount=500.0, period="monthly"),
+    ]
+    for b in budgets:
+        db.add(b)
+        
+    # 2. Subscriptions
+    subscriptions = [
+        Subscription(user_id=user_id, merchant="Bloomberg Terminal", amount=2250.0, frequency="monthly", last_charged_date="2024-06-12"),
+        Subscription(user_id=user_id, merchant="AWS Infrastructure", amount=842.10, frequency="monthly", last_charged_date="2024-06-15"),
+        Subscription(user_id=user_id, merchant="NetJets Management", amount=4500.0, frequency="monthly", last_charged_date="2024-06-18"),
+    ]
+    for s in subscriptions:
+        db.add(s)
+        
+    # 3. Transactions
+    transactions = [
+        # Screenshot Transactions
+        Transaction(user_id=user_id, date="2024-06-28", description="Apple Store Regent St", amount=-2499.00, category="Technology", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-27", description="Nobu Berkeley ST", amount=-840.50, category="Entertainment", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-25", description="Goldman Sachs Asset Mgmt", amount=12500.00, category="Investment", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-24", description="British Airways", amount=-5210.00, category="Travel", status="posted"),
+        
+        # Category spending matching transactions
+        Transaction(user_id=user_id, date="2024-06-01", description="Acme Properties", amount=-4250.00, category="Real Estate & Housing", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-15", description="Travel & Leisure Expense", amount=-1840.50, category="Travel & Leisure", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-20", description="Fine Dining Nobu ST", amount=-980.20, category="Fine Dining", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-26", description="Asset Management Allocation", amount=-12000.00, category="Investments", status="posted"),
+        
+        # Budget matching transactions
+        Transaction(user_id=user_id, date="2024-06-10", description="Office Depot supplies", amount=-2100.00, category="Monthly Operating", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-12", description="Bespoke Tailoring suit", amount=-840.00, category="Discretionary", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-14", description="Client Dinner Nobu ST", amount=-510.00, category="Client Entertainment", status="posted"),
+        
+        # Subscriptions matching charges
+        Transaction(user_id=user_id, date="2024-06-12", description="Bloomberg Terminal Subscription", amount=-2250.00, category="Technology", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-15", description="AWS Infrastructure Service", amount=-842.10, category="Technology", status="posted"),
+        Transaction(user_id=user_id, date="2024-06-18", description="NetJets Management Fee", amount=-4500.00, category="Travel", status="posted"),
+        
+        # Anomaly triggering transaction matching screenshot notice
+        Transaction(user_id=user_id, date="2024-06-22", description="Flagged Travel Expense", amount=-5210.00, category="Travel", status="posted"),
+    ]
+    for t in transactions:
+        db.add(t)
+        
+    db.commit()
+
 # Authentication Endpoints
-@app.post("/api/auth/signup", response_model=UserResponse)
+@app.post("/api/auth/signup", response_model=Token)
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user_data.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     hashed_pwd = get_password_hash(user_data.password)
-    new_user = User(email=user_data.email, password_hash=hashed_pwd)
+    new_user = User(
+        email=user_data.email, 
+        password_hash=hashed_pwd,
+        full_name=user_data.full_name or "Alexander Vance",
+        portfolio_tier=user_data.portfolio_tier or "Private Client"
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return new_user
+    
+    # Auto-seed the database
+    seed_data(db, new_user.id)
+    
+    # Auto-generate access token
+    access_token = create_access_token(data={"sub": new_user.id, "email": new_user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/api/auth/login", response_model=Token)
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
@@ -330,14 +392,28 @@ def delete_budget(
     return {"detail": "Budget deleted"}
 
 # Dashboard Endpoints
+@app.post("/api/dashboard/seed")
+def seed_user_data(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Clear existing transactions, budgets, subscriptions for this user
+    db.query(Transaction).filter(Transaction.user_id == current_user.id).delete()
+    db.query(Budget).filter(Budget.user_id == current_user.id).delete()
+    db.query(Subscription).filter(Subscription.user_id == current_user.id).delete()
+    db.commit()
+    
+    seed_data(db, current_user.id)
+    return {"status": "success", "message": "Demo dataset loaded successfully."}
+
 @app.get("/api/dashboard/stats")
 def get_dashboard_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Calculate stats for current month
-    now = datetime.utcnow()
-    current_month_str = now.strftime("%Y-%m")
-    
     # Fetch all transactions of user
     txs = db.query(Transaction).filter(Transaction.user_id == current_user.id).all()
+    
+    # Calculate stats for the latest month with transactions or current calendar month if empty
+    tx_dates = [t.date[:7] for t in txs if t.date]
+    if tx_dates:
+        current_month_str = max(tx_dates)
+    else:
+        current_month_str = datetime.utcnow().strftime("%Y-%m")
     
     total_income = 0.0
     total_expenses = 0.0
